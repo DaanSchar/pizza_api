@@ -1,7 +1,6 @@
 
 from flask import jsonify
 
-from extensions import db
 from models.model import Pizza
 from schemas.schema import PizzaSchema
 

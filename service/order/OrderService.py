@@ -1,13 +1,16 @@
 import datetime
-from functools import wraps
+import math
+import random
+import string
 
 from flask import jsonify, request
 from sqlalchemy import desc
 
 from extensions import db
-from models.model import Pizza, Drink, Dessert, Customer
+from models.model import Pizza, Drink, Dessert, Customer, Discount
 from models.model import Order
 from schemas.schema import OrderSchema, CustomerSchema
+from service.customer import CustomerService
 
 order_schema = OrderSchema()
 order_schemas = OrderSchema(many=True)
@@ -35,9 +38,13 @@ def post_order():
             status='in process',
         )
         add_order_to_db(order, json)
+
+        if ordered_enough_pizzas(customer):
+            generate_discount_code(customer)
+
         db.session.commit()
-    except:
-        return jsonify({'message': 'something went wrong while processing order'})
+    except Exception as e:
+        return jsonify({'message': 'something went wrong while processing order: ' + str(e)})
 
     return jsonify(order_schema.dump(order)), 200
 
@@ -60,12 +67,13 @@ def get_current_order(customer_id):
 
     try:
         newest_order = order_schemas.dump(get_all_orders(customer_id))[0]
+        print(newest_order)
     except:
         return jsonify({'message': 'no open orders found'}), 404
 
     if not newest_order.get('status') == 'delivered':
-        return jsonify(order_schema.dump(newest_order)), 200
-    return jsonify({'message': 'no open orders found'}), 404
+        return jsonify(newest_order), 200
+    return jsonify({'message': 'no open orders found dumbass'}), 404
 
 
 def cancel_current_order(customer_id):
@@ -128,4 +136,38 @@ def create_customer(customer):
         phone=customer.get('phone')
     )
     db.session.add(new_customer)
+
+
+def get_orders_that_need_deliverers():
+    orders = Order.query.filter_by(status='in process').all()
+    needed_orders = []
+
+    for order in orders:
+        if datetime.datetime.now() >= order.date_of_order + datetime.timedelta(seconds=5) and order.deliverer_id == 0:
+            needed_orders.append(order)
+    return needed_orders
+
+
+def get_orders_on_delivery():
+    orders = Order.query.filter_by(status='out for delivery').all()
+    return orders
+
+
+def ordered_enough_pizzas(customer):
+    customer_info = CustomerService.get_customer_info(customer.customer_id)
+    total_pizzas = customer_info['total_orders']['pizza']
+    total_discounts = len(Discount.query.filter_by(customer_id=customer.customer_id).all())
+
+    return math.floor(total_pizzas/10) > total_discounts
+
+
+
+def generate_discount_code(customer):
+    print('generating code')
+    db.session.add(Discount(customer_id=customer.customer_id, code=get_rand_string(6)))
+
+
+def get_rand_string(length):
+    strng = ''.join(random.choice(string.ascii_lowercase) for i in range(length))
+    return strng
 
