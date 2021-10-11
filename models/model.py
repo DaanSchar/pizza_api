@@ -1,7 +1,6 @@
 import datetime
 
 from extensions import db
-#TODO: implement deliverer system, coupon system
 
 pizza_topping = db.Table('pizza_topping',
                          db.Column('pizza_id', db.Integer, db.ForeignKey('pizza.pizza_id')),
